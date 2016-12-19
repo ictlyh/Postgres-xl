@@ -1,0 +1,13 @@
+language:
+  - c
+
+cache: ccache
+
+compiler:
+  - gcc
+
+script:
+  - sh install.sh
+  - sh init.sh
+  - sh ctl.sh stop
+  - sh ctl.sh start

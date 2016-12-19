@@ -7,9 +7,12 @@ fi
 
 command=$1
 
-PGXL_HOME=/home/luoyuanhao/Softwares/pgxl
+ROOT=$(cd $(dirname $0); pwd)
+PGXL_HOME=${ROOT}/pgxl
+export PATH=${PGXL_HOME}/bin:${PATH}
 
-pushd ${PGXL_HOME}
+#pushd ${PGXL_HOME}
+cd ${PGXL_HOME}
 
 case "$command" in
 	start )
@@ -43,4 +46,5 @@ case "$command" in
 		;;
 esac
 
-popd
+#popd
+cd -
