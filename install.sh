@@ -3,7 +3,7 @@
 ROOT=$(cd $(dirname $0); pwd)
 
 # source directory of postgres-xl
-PGXL_SRC=/home/luoyuanhao/Workspace/postgresxl
+PGXL_SRC=/home/luoyuanhao/Workspace/postgres-xl/postgres-xl
 # directory where postgres-xl is install to
 PGXL_HOME=/home/luoyuanhao/Softwares/pgxl
 
@@ -14,8 +14,8 @@ fi
 pushd ${PGXL_SRC}
 rm -rf ${PGXL_HOME}
 
-./configure --prefix=${PGXL_HOME}
-gmake && gmake install
+CFLAGS='-O0 -g -ggdb' ./configure --prefix=${PGXL_HOME}
+gmake clean && gmake -j`nproc` && gmake install
 
 echo "
 export PATH=${PGXL_HOME}/bin:\${PATH}
