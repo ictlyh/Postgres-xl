@@ -2,7 +2,7 @@
 
 These script are used for:
 1. installing postgres-xl  
-2. building a postgres-xl cluster with two datanodes, two coordinators and a gtm  
+2. building a postgres-xl cluster with specify datanodes, coordinators and a gtm  
 3. controlling the postgres-xl cluster  
 
 #### Install
@@ -16,3 +16,5 @@ If any error occurs, fix it and re-install.
 
 #### Control
 run **sh ctl.sh [start/stop/restart]** to start/stop/restart the postgres-xl cluster.
+
+Reference: http://valleylord.github.io/post/201409-postgres-cluster-xl/

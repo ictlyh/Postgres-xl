@@ -1,109 +1,86 @@
 #!/usr/bin/env bash
 
 ROOT=$(cd $(dirname $0); pwd)
-PGXL_HOME=/home/luoyuanhao/Softwares/pgxl
+PGXL_HOME=${HOME}/pgxl
+
+master=nobida208
+standby=nobida209
+gtm_port=6666
+dn_base_port=25430
+dn_base_pooler_port=35430
+dn_count=2
+co_base_port=2920
+co_count=2
 
 pushd ${PGXL_HOME}
 
-cat << EOF
-
-********************************************************************************
-WARNING: This will remove ${PGXL_HOME}/data. Are you sure?[yn]
-********************************************************************************
-
-EOF
-agreed=
-while [ -z "${agreed}" ] ; do
-    read reply leftover
-    case $reply in
-        [yY] | [yY][eE][sS])
-            agreed=1
-            ;;
-        [nN] | [nN][oO])
-            cat << EOF
-
-********************************************************************************
-                                 Exiting
-********************************************************************************
-
-EOF
-            exit 1
-            ;;
-    esac
-done
-
-sh ${ROOT}/ctl.sh stop
+sh ${ROOT}/ctl.sh stop 
 sleep 2
 
-rm -rf ./data
-mkdir ./data
-
-./bin/initdb -D ./data/node1 --nodename node1
-./bin/initdb -D ./data/node2 --nodename node2
-
-echo "
+for i in $(seq $dn_count); do
+	rm -rf /data$i/node$i
+	./bin/initdb -D /data$i/node$i --nodename node$i
+	echo "
 listen_addresses = '*'
-port = 25431
-gtm_host = 'localhost'
-gtm_port = 6666
-pooler_port = 35431
-" >> ./data/node1/postgresql.conf
-
-echo "
+port = $(($dn_base_port + $i))
+gtm_host = '$master'
+gtm_port = $gtm_port
+pooler_port = $(($dn_base_pooler_port + $i))
+" >> /data$i/node$i/postgresql.conf
+	echo "
 host all all 0.0.0.0/0 trust
-" >> ./data/node1/pg_hba.conf
+" >> /data$i/node$i/pg_hba.conf
+done
 
-echo "
+./bin/initgtm -Z gtm -D /data1/gtm
+
+for i in $(seq $co_count); do
+	rm -rf /data$i/coord$i
+	./bin/initdb -D /data$i/coord$i --nodename coord$i
+	echo "
 listen_addresses = '*'
-port = 25432
-gtm_host = 'localhost'
-gtm_port = 6666
-pooler_port = 35432
-" >> ./data/node2/postgresql.conf
-
-echo "
+port = $(($co_base_port + $i))
+gtm_host = '$master'
+gtm_port = $gtm_port
+pooler_port = $(($gtm_port + $i))
+" >> /data$i/coord$i/postgresql.conf
+	echo "
 host all all 0.0.0.0/0 trust
-" >> ./data/node2/pg_hba.conf
-
-./bin/initgtm -Z gtm -D ./data/gtm
-
-./bin/initdb -D ./data/coord1 --nodename coord1
-./bin/initdb -D ./data/coord2 --nodename coord2
-
-echo "
-listen_addresses = '*'
-port = 2921
-gtm_host = 'localhost'
-gtm_port = 6666
-pooler_port = 6667
-" >> ./data/coord1/postgresql.conf
-
-echo "
-host all all 0.0.0.0/0 trust
-" >> ./data/coord1/pg_hba.conf
-
-echo "
-listen_addresses = '*'
-port = 2922
-gtm_host = 'localhost'
-gtm_port = 6666
-pooler_port = 6668
-" >> ./data/coord2/postgresql.conf
-
-echo "
-host all all 0.0.0.0/0 trust
-" >> ./data/coord2/pg_hba.conf
+" >> /data$i/coord$i/pg_hba.conf
+done
 
 sh ${ROOT}/ctl.sh start
 sleep 2
 
-./bin/psql -d postgres -p 2921 -f ${ROOT}/register.sql
-./bin/psql -d postgres -p 2922 -f ${ROOT}/register.sql
-./bin/psql -d postgres -p 25431 -f ${ROOT}/register.sql
-./bin/psql -d postgres -p 25432 -f ${ROOT}/register.sql
+# generate register.sql
+rm -rf ${ROOT}/register.sql
+for i in $(seq $dn_count); do
+	echo "
+drop node node$i;
+drop node group gp$i;
+create node node$i with(TYPE='datanode', HOST='$master', PORT=$(($dn_base_port + $i)));
+alter node node$i with(TYPE='datanode', HOST='$master', PORT=$(($dn_base_port + $i)));
+create node group gp$i with(node$i);
+" >>${ROOT}/register.sql
+done
+for i in $(seq $co_count); do
+	echo "
+drop node coord$i;
+create node coord$i with(TYPE='coordinator',HOST='$master',PORT=$(($co_base_port + $i)));
+alter node coord$i with(TYPE='coordinator',HOST='$master',PORT=$(($co_base_port + $i)));
+" >>${ROOT}/register.sql
+done
+echo "
+select pgxc_pool_reload();
+select * from pgxc_node;
+" >>${ROOT}/register.sql
 
-./bin/psql -d postgres -p 2921 -c 'create database test'
+# run register query on data nodes and coordinators
+for i in $(seq $dn_count); do
+	./bin/psql -d postgres -p $(($dn_base_port + $i)) -f ${ROOT}/register.sql
+done
+for i in $(seq $co_count); do
+	./bin/psql -d postgres -p $(($co_base_port + $i)) -f ${ROOT}/register.sql
+done
 
 popd
-echo "You can use below command to login to the database now:
-${PGXL_HOME}/bin/psql -p 2921 -d test"
